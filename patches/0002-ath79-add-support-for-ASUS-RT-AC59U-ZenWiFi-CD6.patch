@@ -1,0 +1,534 @@
+From d7533e9dcdae451b30e84cb879288a302c325741 Mon Sep 17 00:00:00 2001
+From: Wenli Looi <wlooi@ucalgary.ca>
+Date: Sat, 1 Jul 2023 17:46:15 +0000
+Subject: [PATCH 2/3] ath79: add support for ASUS RT-AC59U / ZenWiFi CD6
+
+ASUS RT-AC59U / RT-AC59U v2 are wi-fi routers with a large number of
+alternate names, including RT-AC1200GE, RT-AC1300G PLUS, RT-AC1500UHP,
+RT-AC57U v2/v3, RT-AC58U v2/v3, and RT-ACRH12.
+
+ASUS ZenWiFi AC Mini(CD6) is a mesh wifi system. The unit labeled CD6R
+is the router, and CD6N is the node.
+
+Hardware:
+
+- SoC: QCN5502
+- RAM: 128 MiB
+- UART: 115200 baud (labeled on boards)
+- Wireless:
+  - 2.4GHz: QCN5502 on-chip 4x4 802.11b/g/n
+    currently unsupported due to missing support for QCN550x in ath9k
+  - 5GHz: QCA9888 pcie 5GHz 2x2 802.11a/n/ac
+- Flash: SPI NOR
+  - RT-AC59U / CD6N: 16 MiB
+  - RT-AC59U v2 / CD6R: 32 MiB
+- Ethernet: gigabit
+  - RT-AC59U / RT-AC59U v2: 4x LAN 1x WAN
+  - CD6R: 3x LAN 1x WAN
+  - CD6N: 2x LAN
+- USB:
+  - RT-AC59U / RT-AC59U v2: 1 port USB 2.0
+  - CD6R / CD6N: none
+
+WiFi calibration data contains valid MAC addresses.
+
+The initramfs image is uncompressed because I was unable to boot a
+compressed initramfs from memory (gzip or lzma). Booting a compressed
+image from flash works fine.
+
+Installation:
+
+To install without opening the case:
+
+- Set your computer IP address to 192.168.1.10/24
+- Power up with the Reset button pressed
+- Release the Reset button after about 5 seconds or until you see the
+  power LED blinking slowly
+- Upload OpenWRT factory image via TFTP client to 192.168.1.1
+
+Revert to stock firmware using the same TFTP method.
+
+Signed-off-by: Wenli Looi <wlooi@ucalgary.ca>
+---
+ target/linux/ath79/dts/qcn5502_asus.dtsi      | 114 ++++++++++++++++++
+ .../ath79/dts/qcn5502_asus_rt-ac59u-v2.dts    |  19 +++
+ .../linux/ath79/dts/qcn5502_asus_rt-ac59u.dts |  19 +++
+ .../ath79/dts/qcn5502_asus_rt-ac59u.dtsi      |  69 +++++++++++
+ .../ath79/dts/qcn5502_asus_zenwifi-cd6.dtsi   |  57 +++++++++
+ .../ath79/dts/qcn5502_asus_zenwifi-cd6n.dts   |  19 +++
+ .../ath79/dts/qcn5502_asus_zenwifi-cd6r.dts   |  19 +++
+ .../generic/base-files/etc/board.d/02_network |  10 ++
+ target/linux/ath79/image/generic.mk           |  64 ++++++++++
+ 9 files changed, 390 insertions(+)
+ create mode 100644 target/linux/ath79/dts/qcn5502_asus.dtsi
+ create mode 100644 target/linux/ath79/dts/qcn5502_asus_rt-ac59u-v2.dts
+ create mode 100644 target/linux/ath79/dts/qcn5502_asus_rt-ac59u.dts
+ create mode 100644 target/linux/ath79/dts/qcn5502_asus_rt-ac59u.dtsi
+ create mode 100644 target/linux/ath79/dts/qcn5502_asus_zenwifi-cd6.dtsi
+ create mode 100644 target/linux/ath79/dts/qcn5502_asus_zenwifi-cd6n.dts
+ create mode 100644 target/linux/ath79/dts/qcn5502_asus_zenwifi-cd6r.dts
+
+diff --git a/target/linux/ath79/dts/qcn5502_asus.dtsi b/target/linux/ath79/dts/qcn5502_asus.dtsi
+new file mode 100644
+index 0000000000..a2b4a76e92
+--- /dev/null
++++ b/target/linux/ath79/dts/qcn5502_asus.dtsi
+@@ -0,0 +1,114 @@
++// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
++
++#include "qca956x.dtsi"
++
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/input/input.h>
++
++/ {
++	aliases {
++		label-mac-device = &eth0;
++	};
++};
++
++&eth0 {
++	status = "okay";
++
++	pll-data = <0x03000101 0x00000101 0x00001919>;
++
++	phy-mode = "sgmii";
++	phy-handle = <&phy0>;
++
++	nvmem-cells = <&macaddr_factory_1002>;
++	nvmem-cell-names = "mac-address";
++};
++
++&mdio0 {
++	status = "okay";
++
++	phy0: ethernet-phy@0 {
++		reg = <0>;
++		phy-mode = "sgmii";
++		qca,mib-poll-interval = <500>;
++
++		qca,ar8327-initvals = <
++			0x04 0x80080080 /* PORT0 PAD MODE CTRL */
++			0x08 0x00000000 /* PORT5 PAD MODE CTRL */
++			0x0c 0x00000000 /* PORT6 PAD MODE CTRL */
++			0x10 0x00000080 /* POWER_ON_STRAP */
++			0x7c 0x0000007e /* PORT0_STATUS */
++			0x94 0x00000200 /* PORT6_STATUS */
++			>;
++	};
++};
++
++&pcie {
++	status = "okay";
++
++	wifi@0,0 {
++		compatible = "qcom,ath10k";
++		reg = <0 0 0 0 0>;
++
++		nvmem-cells = <&precal_factory_5000>;
++		nvmem-cell-names = "pre-calibration";
++	};
++};
++
++&spi {
++	status = "okay";
++
++	flash@0 {
++		compatible = "jedec,spi-nor";
++		reg = <0>;
++		spi-max-frequency = <25000000>;
++		m25p,fast-read;
++
++		mtdparts: partitions {
++			compatible = "fixed-partitions";
++			#address-cells = <1>;
++			#size-cells = <1>;
++
++			partition@0 {
++				label = "Bootloader";
++				reg = <0x000000 0x040000>;
++				read-only;
++			};
++
++			partition@40000 {
++				label = "nvram";
++				reg = <0x040000 0x010000>;
++				read-only;
++			};
++
++			partition@50000 {
++				label = "Factory";
++				reg = <0x050000 0x010000>;
++				read-only;
++
++				compatible = "nvmem-cells";
++				#address-cells = <1>;
++				#size-cells = <1>;
++
++				cal_factory_1000: cal@1000 {
++					reg = <0x1000 0x440>;
++				};
++
++				macaddr_factory_1002: macaddr@1002 {
++					reg = <0x1002 0x6>;
++				};
++
++				precal_factory_5000: precal@5000 {
++					reg = <0x5000 0x2f20>;
++				};
++			};
++		};
++	};
++};
++
++&wmac {
++	/* Does not work due to lack of QCN5502 support in ath9k. */
++	status = "disabled";
++
++	nvmem-cells = <&cal_factory_1000>;
++	nvmem-cell-names = "calibration";
++};
+diff --git a/target/linux/ath79/dts/qcn5502_asus_rt-ac59u-v2.dts b/target/linux/ath79/dts/qcn5502_asus_rt-ac59u-v2.dts
+new file mode 100644
+index 0000000000..795bb299e9
+--- /dev/null
++++ b/target/linux/ath79/dts/qcn5502_asus_rt-ac59u-v2.dts
+@@ -0,0 +1,19 @@
++// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
++
++#include "qcn5502_asus_rt-ac59u.dtsi"
++
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/input/input.h>
++
++/ {
++	compatible = "asus,rt-ac59u-v2", "qca,qcn5500", "qca,qca9560";
++	model = "ASUS RT-AC59U v2";
++};
++
++&mtdparts {
++	partition@60000 {
++		label = "firmware";
++		reg = <0x060000 0x1fa0000>;
++		compatible = "denx,uimage";
++	};
++};
+diff --git a/target/linux/ath79/dts/qcn5502_asus_rt-ac59u.dts b/target/linux/ath79/dts/qcn5502_asus_rt-ac59u.dts
+new file mode 100644
+index 0000000000..a4ebeb3912
+--- /dev/null
++++ b/target/linux/ath79/dts/qcn5502_asus_rt-ac59u.dts
+@@ -0,0 +1,19 @@
++// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
++
++#include "qcn5502_asus_rt-ac59u.dtsi"
++
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/input/input.h>
++
++/ {
++	compatible = "asus,rt-ac59u", "qca,qcn5500", "qca,qca9560";
++	model = "ASUS RT-AC59U";
++};
++
++&mtdparts {
++	partition@60000 {
++		label = "firmware";
++		reg = <0x060000 0xfa0000>;
++		compatible = "denx,uimage";
++	};
++};
+diff --git a/target/linux/ath79/dts/qcn5502_asus_rt-ac59u.dtsi b/target/linux/ath79/dts/qcn5502_asus_rt-ac59u.dtsi
+new file mode 100644
+index 0000000000..ffc2b89345
+--- /dev/null
++++ b/target/linux/ath79/dts/qcn5502_asus_rt-ac59u.dtsi
+@@ -0,0 +1,69 @@
++// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
++
++#include "qcn5502_asus.dtsi"
++
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/input/input.h>
++
++/ {
++	aliases {
++		led-boot = &led_power;
++		led-failsafe = &led_power;
++		led-running = &led_power;
++		led-upgrade = &led_power;
++	};
++
++	keys {
++		compatible = "gpio-keys";
++
++		reset {
++			label = "reset";
++			linux,code = <KEY_RESTART>;
++			gpios = <&gpio 17 GPIO_ACTIVE_LOW>;
++			debounce-interval = <60>;
++		};
++
++		wps {
++			label = "wps";
++			linux,code = <KEY_WPS_BUTTON>;
++			gpios = <&gpio 1 GPIO_ACTIVE_LOW>;
++			debounce-interval = <60>;
++		};
++	};
++
++	leds {
++		compatible = "gpio-leds";
++
++		led_power: power {
++			label = "blue:power";
++			gpios = <&gpio 16 GPIO_ACTIVE_LOW>;
++		};
++
++		usb {
++			label = "blue:usb";
++			gpios = <&gpio 4 GPIO_ACTIVE_LOW>;
++			trigger-sources = <&hub_port0>;
++			linux,default-trigger = "usbport";
++		};
++
++		wlan2g {
++			label = "blue:wlan2g";
++			gpios = <&gpio 15 GPIO_ACTIVE_LOW>;
++			linux,default-trigger = "phy1tpt";
++		};
++
++		wlan5g {
++			label = "blue:wlan5g";
++			gpios = <&gpio 5 GPIO_ACTIVE_LOW>;
++			linux,default-trigger = "phy0tpt";
++		};
++	};
++};
++
++&usb_phy0 {
++	status = "okay";
++};
++
++&usb0 {
++	status = "okay";
++};
+diff --git a/target/linux/ath79/dts/qcn5502_asus_zenwifi-cd6.dtsi b/target/linux/ath79/dts/qcn5502_asus_zenwifi-cd6.dtsi
+new file mode 100644
+index 0000000000..1d8fe7637a
+--- /dev/null
++++ b/target/linux/ath79/dts/qcn5502_asus_zenwifi-cd6.dtsi
+@@ -0,0 +1,57 @@
++// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
++
++#include "qcn5502_asus.dtsi"
++
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/input/input.h>
++
++/ {
++	aliases {
++		led-boot = &led_blue;
++		led-failsafe = &led_red;
++		led-running = &led_blue;
++		led-upgrade = &led_red;
++	};
++
++	keys {
++		compatible = "gpio-keys";
++
++		reset {
++			label = "reset";
++			linux,code = <KEY_RESTART>;
++			gpios = <&gpio 1 GPIO_ACTIVE_LOW>;
++			debounce-interval = <60>;
++		};
++
++		wps {
++			label = "wps";
++			linux,code = <KEY_WPS_BUTTON>;
++			gpios = <&gpio 17 GPIO_ACTIVE_LOW>;
++			debounce-interval = <60>;
++		};
++	};
++
++	leds {
++		compatible = "gpio-leds";
++
++		led_blue: blue {
++			label = "blue";
++			gpios = <&gpio 5 GPIO_ACTIVE_LOW>;
++		};
++
++		green {
++			label = "green";
++			gpios = <&gpio 15 GPIO_ACTIVE_LOW>;
++		};
++
++		led_red: red {
++			label = "red";
++			gpios = <&gpio 4 GPIO_ACTIVE_LOW>;
++		};
++
++		white {
++			label = "white";
++			gpios = <&gpio 16 GPIO_ACTIVE_LOW>;
++		};
++	};
++};
+diff --git a/target/linux/ath79/dts/qcn5502_asus_zenwifi-cd6n.dts b/target/linux/ath79/dts/qcn5502_asus_zenwifi-cd6n.dts
+new file mode 100644
+index 0000000000..426f203357
+--- /dev/null
++++ b/target/linux/ath79/dts/qcn5502_asus_zenwifi-cd6n.dts
+@@ -0,0 +1,19 @@
++// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
++
++#include "qcn5502_asus_zenwifi-cd6.dtsi"
++
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/input/input.h>
++
++/ {
++	compatible = "asus,zenwifi-cd6n", "qca,qcn5500", "qca,qca9560";
++	model = "ASUS ZenWiFi CD6N";
++};
++
++&mtdparts {
++	partition@60000 {
++		label = "firmware";
++		reg = <0x060000 0xfa0000>;
++		compatible = "denx,uimage";
++	};
++};
+diff --git a/target/linux/ath79/dts/qcn5502_asus_zenwifi-cd6r.dts b/target/linux/ath79/dts/qcn5502_asus_zenwifi-cd6r.dts
+new file mode 100644
+index 0000000000..b9c2ba0288
+--- /dev/null
++++ b/target/linux/ath79/dts/qcn5502_asus_zenwifi-cd6r.dts
+@@ -0,0 +1,19 @@
++// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
++
++#include "qcn5502_asus_zenwifi-cd6.dtsi"
++
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/input/input.h>
++
++/ {
++	compatible = "asus,zenwifi-cd6r", "qca,qcn5500", "qca,qca9560";
++	model = "ASUS ZenWiFi CD6R";
++};
++
++&mtdparts {
++	partition@60000 {
++		label = "firmware";
++		reg = <0x060000 0x1fa0000>;
++		compatible = "denx,uimage";
++	};
++};
+diff --git a/target/linux/ath79/generic/base-files/etc/board.d/02_network b/target/linux/ath79/generic/base-files/etc/board.d/02_network
+index 0d7396a04d..78bb0afdc3 100644
+--- a/target/linux/ath79/generic/base-files/etc/board.d/02_network
++++ b/target/linux/ath79/generic/base-files/etc/board.d/02_network
+@@ -157,6 +157,14 @@ ath79_setup_interfaces()
+ 		ucidef_add_switch "switch0" \
+ 			"0@eth0" "1:lan:1" "2:lan:2" "3:lan:3" "6:lan:4"
+ 		;;
++	asus,zenwifi-cd6n)
++		ucidef_add_switch "switch0" \
++			"0@eth0" "1:lan:1" "4:lan:2"
++		;;
++	asus,zenwifi-cd6r)
++		ucidef_add_switch "switch0" \
++			"0@eth0" "1:lan:2" "3:lan:1" "4:lan:3" "2:wan"
++		;;
+ 	atheros,db120)
+ 		ucidef_add_switch "switch0" \
+ 			"0@eth0" "2:lan" "3:lan" "4:lan" "5:lan" "1:wan"
+@@ -384,6 +392,8 @@ ath79_setup_interfaces()
+ 		ucidef_add_switch "switch0" \
+ 			"0@eth1" "1:lan"
+ 		;;
++	asus,rt-ac59u|\
++	asus,rt-ac59u-v2|\
+ 	mercury,mw4530r-v1|\
+ 	tplink,archer-a7-v5|\
+ 	tplink,archer-a9-v6|\
+diff --git a/target/linux/ath79/image/generic.mk b/target/linux/ath79/image/generic.mk
+index 1a558c30a0..35816cb70b 100644
+--- a/target/linux/ath79/image/generic.mk
++++ b/target/linux/ath79/image/generic.mk
+@@ -482,6 +482,70 @@ define Device/asus_rp-ac66
+ endef
+ TARGET_DEVICES += asus_rp-ac66
+ 
++define Device/asus_qcn5502
++  SOC := qcn5502
++  DEVICE_VENDOR := ASUS
++  DEVICE_PACKAGES := kmod-ath10k-ct ath10k-firmware-qca9888-ct
++  KERNEL_INITRAMFS := kernel-bin | append-dtb | uImage none
++  IMAGES += factory.bin
++  IMAGE/factory.bin := append-kernel | pad-to $$$$(BLOCKSIZE) | \
++	append-rootfs | pad-rootfs
++endef
++
++define Device/asus_rt-ac59u
++  $(Device/asus_qcn5502)
++  DEVICE_MODEL := RT-AC59U
++  DEVICE_ALT0_VENDOR := ASUS
++  DEVICE_ALT0_MODEL := RT-AC1200GE
++  DEVICE_ALT1_VENDOR := ASUS
++  DEVICE_ALT1_MODEL := RT-AC1500G PLUS
++  DEVICE_ALT2_VENDOR := ASUS
++  DEVICE_ALT2_MODEL := RT-AC1500UHP
++  DEVICE_ALT3_VENDOR := ASUS
++  DEVICE_ALT3_MODEL := RT-AC57U
++  DEVICE_ALT3_VARIANT := v2
++  DEVICE_ALT4_VENDOR := ASUS
++  DEVICE_ALT4_MODEL := RT-AC58U
++  DEVICE_ALT4_VARIANT := v2
++  DEVICE_ALT5_VENDOR := ASUS
++  DEVICE_ALT5_MODEL := RT-ACRH12
++  IMAGE_SIZE := 16000k
++  DEVICE_PACKAGES += kmod-usb2 kmod-usb-ledtrig-usbport
++endef
++TARGET_DEVICES += asus_rt-ac59u
++
++define Device/asus_rt-ac59u-v2
++  $(Device/asus_qcn5502)
++  DEVICE_MODEL := RT-AC59U
++  DEVICE_VARIANT := v2
++  DEVICE_ALT0_VENDOR := ASUS
++  DEVICE_ALT0_MODEL := RT-AC1300G PLUS
++  DEVICE_ALT0_VARIANT := v3
++  DEVICE_ALT1_VENDOR := ASUS
++  DEVICE_ALT1_MODEL := RT-AC57U
++  DEVICE_ALT1_VARIANT := v3
++  DEVICE_ALT2_VENDOR := ASUS
++  DEVICE_ALT2_MODEL := RT-AC58U
++  DEVICE_ALT2_VARIANT := v3
++  IMAGE_SIZE := 32384k
++  DEVICE_PACKAGES += kmod-usb2 kmod-usb-ledtrig-usbport
++endef
++TARGET_DEVICES += asus_rt-ac59u-v2
++
++define Device/asus_zenwifi-cd6n
++  $(Device/asus_qcn5502)
++  DEVICE_MODEL := ZenWiFi CD6N
++  IMAGE_SIZE := 16000k
++endef
++TARGET_DEVICES += asus_zenwifi-cd6n
++
++define Device/asus_zenwifi-cd6r
++  $(Device/asus_qcn5502)
++  DEVICE_MODEL := ZenWiFi CD6R
++  IMAGE_SIZE := 32384k
++endef
++TARGET_DEVICES += asus_zenwifi-cd6r
++
+ define Device/atheros_db120
+   $(Device/loader-okli-uimage)
+   SOC := ar9344
+-- 
+2.51.1
+
