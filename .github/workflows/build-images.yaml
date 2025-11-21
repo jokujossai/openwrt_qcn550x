@@ -1,0 +1,106 @@
+name: Build Images
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+jobs:
+  build:
+    name: Build Images
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Get OpenWrt version
+        id: openwrt-version
+        run: |
+          echo "version=$(make openwrt-version)" >> $GITHUB_OUTPUT
+      - name: Restore cached sources
+        id: restore-sources
+        uses: actions/cache/restore@v4
+        with:
+          key: openwrt-${{ steps.openwrt-version.outputs.version }}
+          path: |
+            openwrt-sdk-${{ steps.openwrt-version.outputs.version }}-*.tar.*
+            openwrt-imagebuilder-${{ steps.openwrt-version.outputs.version }}-*.tar.*
+      - name: Download OpenWrt sources
+        if: steps.restore-sources.outputs.cache-hit != 'true'
+        id: download-sources
+        run: make -j4 sources
+      - name: Cache OpenWrt sources
+        if: steps.restore-sources.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          key: openwrt-${{ steps.openwrt-version.outputs.version }}
+          path: |
+            openwrt-sdk-${{ steps.openwrt-version.outputs.version }}-*.tar.*
+            openwrt-imagebuilder-${{ steps.openwrt-version.outputs.version }}-*.tar.*
+      - name: Fetch cached OpenWrt feeds
+        id: restore-feeds
+        uses: actions/cache/restore@v4
+        with:
+          key: openwrt-feeds-${{ steps.openwrt-version.outputs.version }}
+          path: |
+            openwrt-sdk-${{ steps.openwrt-version.outputs.version }}-*/*
+            openwrt-imagebuilder-${{ steps.openwrt-version.outputs.version }}-*/*
+            linux-include
+      - name: Prepare build environment
+        if: steps.restore-feeds.outputs.cache-hit != 'true'
+        run: |
+          make -j4 builder sdk feeds linux-include
+      - name: Cache feeds
+        if: steps.restore-feeds.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          key: openwrt-feeds-${{ steps.openwrt-version.outputs.version }}
+          path: |
+            openwrt-sdk-${{ steps.openwrt-version.outputs.version }}-*/*
+            openwrt-imagebuilder-${{ steps.openwrt-version.outputs.version }}-*/*
+            linux-include
+      - name: Build firmware images
+        run: make -j4
+      - name: Save firmware images
+        uses: actions/upload-artifact@v5
+        with:
+          name: firmware
+          path: |
+            openwrt-imagebuilder-*/bin/targets/*/*/openwrt-*.bin
+            openwrt-imagebuilder-*/bin/targets/*/*/openwrt-*.manifest
+            openwrt-imagebuilder-*/bin/targets/*/*/sha256sums
+            openwrt-imagebuilder-*/bin/targets/*/*/profiles.json
+          retention-days: 7
+
+  release:
+    name: Release Images
+    runs-on: ubuntu-22.04
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Download firmware images
+        uses: actions/download-artifact@v6
+        with:
+          name: firmware
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            Automated release. Please see the project README.md for more information.
+
+            [Build logs.](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          prerelease: true
+          files: |
+            openwrt-imagebuilder-*/bin/targets/*/*/openwrt-*.bin
+            openwrt-imagebuilder-*/bin/targets/*/*/openwrt-*.manifest
+            openwrt-imagebuilder-*/bin/targets/*/*/sha256sums
+            openwrt-imagebuilder-*/bin/targets/*/*/profiles.json

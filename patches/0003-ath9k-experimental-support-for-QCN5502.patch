@@ -1,0 +1,86 @@
+From 8e5b0e255bfbfc84e1628e2574ed372a73df3f0a Mon Sep 17 00:00:00 2001
+From: Wenli Looi <wlooi@ucalgary.ca>
+Date: Mon, 13 Nov 2023 04:45:53 +0000
+Subject: [PATCH 3/3] ath9k: experimental support for QCN5502
+
+---
+ target/linux/ath79/dts/qcn5502_asus.dtsi      |    6 +-
+ .../ath79/dts/qcn5502_netgear_ex7300-v2.dts   |    6 +-
+ .../ath79/dts/qcn5502_tplink_archer-a9-v6.dts |    6 +-
+ 3 files changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/target/linux/ath79/dts/qcn5502_asus.dtsi b/target/linux/ath79/dts/qcn5502_asus.dtsi
+index a2b4a76e92..c85e165401 100644
+--- a/target/linux/ath79/dts/qcn5502_asus.dtsi
++++ b/target/linux/ath79/dts/qcn5502_asus.dtsi
+@@ -90,7 +90,7 @@
+ 				#size-cells = <1>;
+ 
+ 				cal_factory_1000: cal@1000 {
+-					reg = <0x1000 0x440>;
++					reg = <0x1000 0x540>;
+ 				};
+ 
+ 				macaddr_factory_1002: macaddr@1002 {
+@@ -106,8 +106,8 @@
+ };
+ 
+ &wmac {
+-	/* Does not work due to lack of QCN5502 support in ath9k. */
+-	status = "disabled";
++	compatible = "qca,qcn5502-wmac";
++	status = "okay";
+ 
+ 	nvmem-cells = <&cal_factory_1000>;
+ 	nvmem-cell-names = "calibration";
+diff --git a/target/linux/ath79/dts/qcn5502_netgear_ex7300-v2.dts b/target/linux/ath79/dts/qcn5502_netgear_ex7300-v2.dts
+index 4ebbdcc105..3877f1590f 100644
+--- a/target/linux/ath79/dts/qcn5502_netgear_ex7300-v2.dts
++++ b/target/linux/ath79/dts/qcn5502_netgear_ex7300-v2.dts
+@@ -209,7 +209,7 @@
+ 				#size-cells = <1>;
+ 
+ 				cal_art_1000: cal@1000 {
+-					reg = <0x1000 0x440>;
++					reg = <0x1000 0x540>;
+ 				};
+ 
+ 				precal_art_5000: precal@5000 {
+@@ -222,8 +222,8 @@
+ 
+ 
+ &wmac {
+-	/* Does not work due to lack of QCN5502 support in ath9k. */
+-	status = "disabled";
++	compatible = "qca,qcn5502-wmac";
++	status = "okay";
+ 
+ 	nvmem-cells = <&macaddr_artmtd_6>, <&cal_art_1000>;
+ 	nvmem-cell-names = "mac-address", "calibration";
+diff --git a/target/linux/ath79/dts/qcn5502_tplink_archer-a9-v6.dts b/target/linux/ath79/dts/qcn5502_tplink_archer-a9-v6.dts
+index ef0ea321e0..f70f0fed0f 100644
+--- a/target/linux/ath79/dts/qcn5502_tplink_archer-a9-v6.dts
++++ b/target/linux/ath79/dts/qcn5502_tplink_archer-a9-v6.dts
+@@ -167,7 +167,7 @@
+ 				#size-cells = <1>;
+ 
+ 				cal_art_1000: cal@1000 {
+-					reg = <0x1000 0x440>;
++					reg = <0x1000 0x540>;
+ 				};
+ 
+ 				precal_art_5000: precal@5000 {
+@@ -231,8 +231,8 @@
+ };
+ 
+ &wmac {
+-	/* TODO: missing support in ath9k */
+-	status = "disabled";
++	compatible = "qca,qcn5502-wmac";
++	status = "okay";
+ 
+ 	nvmem-cells = <&cal_art_1000>, <&macaddr_info_8>;
+ 	nvmem-cell-names = "calibration", "mac-address";
+-- 
+2.51.1
+
