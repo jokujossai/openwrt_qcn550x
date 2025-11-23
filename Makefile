@@ -1,22 +1,22 @@
-VERSION := 23.05.6
-GCC_VERSION := 12.3.0_musl
+VERSION := 24.10.4
+GCC_VERSION := 13.3.0_musl
 BOARD := ath79
 SUBTARGET := generic
 ARCH := mips_24kc
 BUILDER := openwrt-imagebuilder-$(VERSION)-$(BOARD)-$(SUBTARGET).Linux-x86_64
 SDK := openwrt-sdk-$(VERSION)-$(BOARD)-$(SUBTARGET)_gcc-$(GCC_VERSION).Linux-x86_64
 PROFILES := asus_rt-ac59u asus_rt-ac59u-v2
-PACKAGES := luci-ssl uboot-envtools kmod-mac80211 kmod-cfg80211 kmod-ath kmod-ath9k kmod-ath9k-common
+PACKAGES := luci-ssl kmod-mac80211 kmod-cfg80211 kmod-ath kmod-ath9k kmod-ath9k-common
 EXTRA_IMAGE_NAME := custom
 
-BUILDER_URL := https://downloads.openwrt.org/releases/$(VERSION)/targets/$(BOARD)/$(SUBTARGET)/$(BUILDER).tar.xz
-SDK_URL := https://downloads.openwrt.org/releases/$(VERSION)/targets/$(BOARD)/$(SUBTARGET)/$(SDK).tar.xz
+BUILDER_URL := https://downloads.openwrt.org/releases/$(VERSION)/targets/$(BOARD)/$(SUBTARGET)/$(BUILDER).tar.zst
+SDK_URL := https://downloads.openwrt.org/releases/$(VERSION)/targets/$(BOARD)/$(SUBTARGET)/$(SDK).tar.zst
 
 # Snapshot build
 #BUILDER := openwrt-imagebuilder-ath79-generic.Linux-x86_64
-#SDK := openwrt-sdk-ath79-generic_gcc-12.3.0_musl.Linux-x86_64
-#BUILDER_URL := https://downloads.openwrt.org/snapshots/targets/$(BOARD)/$(SUBTARGET)/$(BUILDER).tar.xz
-#SDK_URL := https://downloads.openwrt.org/snapshots/targets/$(BOARD)/$(SUBTARGET)/$(SDK).tar.xz
+#SDK := openwrt-sdk-ath79-generic_gcc-13.3.0_musl.Linux-x86_64
+#BUILDER_URL := https://downloads.openwrt.org/snapshots/targets/$(BOARD)/$(SUBTARGET)/$(BUILDER).tar.zst
+#SDK_URL := https://downloads.openwrt.org/snapshots/targets/$(BOARD)/$(SUBTARGET)/$(SDK).tar.zst
 
 TOPDIR := $(CURDIR)/$(BUILDER)
 SDKDIR := $(CURDIR)/$(SDK)
@@ -26,12 +26,12 @@ LINUX_VERSION = $(shell sed -n -e '/Linux-Version: / {s/Linux-Version: //p;q}' $
 
 all: images
 
-$(BUILDER).tar.xz:
+$(BUILDER).tar.zst:
 	curl -sfLO $(BUILDER_URL)
 
-$(BUILDER)/.stamp: $(BUILDER).tar.xz
+$(BUILDER)/.stamp: $(BUILDER).tar.zst
 	rm -rf $(BUILDER)
-	tar -xf $(BUILDER).tar.xz
+	tar -xf $(BUILDER).tar.zst
 
 	touch $(BUILDER)/.stamp
 
@@ -44,12 +44,12 @@ $(BUILDER)/.patch-stamp: $(BUILDER)/.stamp $(SDK)/.patch-stamp patches/*.patch
 
 	touch $(BUILDER)/.patch-stamp
 
-$(SDK).tar.xz:
+$(SDK).tar.zst:
 	curl -sfLO $(SDK_URL)
 
-$(SDK)/.stamp: $(SDK).tar.xz
+$(SDK)/.stamp: $(SDK).tar.zst
 	rm -rf $(SDK)
-	tar -xf $(SDK).tar.xz
+	tar -xf $(SDK).tar.zst
 
 	touch $(SDK)/.stamp
 
@@ -67,7 +67,6 @@ $(SDK)/package/feeds/.stamp: $(SDK)/.stamp
 	rm -rf $(SDK)/package/feeds $(SDK)/feeds $(SDK)/package/.stamp
 
 	cd $(SDK) && (./scripts/feeds update -a || ./scripts/feeds update -a)
-	cd $(SDK) && ./scripts/feeds install uboot-envtools
 	cd $(SDK) && ./scripts/feeds install mac80211
 
 	cd $(SDK) && $(MAKE) defconfig
@@ -76,7 +75,6 @@ $(SDK)/package/feeds/.stamp: $(SDK)/.stamp
 
 $(SDK)/package/feeds/.patch-stamp: $(SDK)/package/feeds/.stamp patches/sdk/*.patch
 	sed -i 's/^PKG_RELEASE:=\([0-9]\+\)$$/PKG_RELEASE:=\1+qcn5502/' \
-		$(SDK)/package/feeds/base/uboot-envtools/Makefile \
 		$(SDK)/package/feeds/base/mac80211/Makefile
 
 	# Apply all patches
@@ -85,7 +83,7 @@ $(SDK)/package/feeds/.patch-stamp: $(SDK)/package/feeds/.stamp patches/sdk/*.pat
 	touch $(SDK)/package/feeds/.patch-stamp
 
 $(SDK)/package/feeds/base/.stamp: $(BUILDER)/.patch-stamp $(SDK)/package/feeds/.patch-stamp
-	cd $(SDK) && $(MAKE) package/uboot-envtools/compile package/mac80211/compile
+	cd $(SDK) && $(MAKE) package/mac80211/compile
 	touch $(SDK)/package/feeds/base/.stamp
 
 $(BUILDER)/packages/.stamp: $(BUILDER)/.patch-stamp $(SDK)/package/feeds/base/.stamp
@@ -97,6 +95,7 @@ linux-include: $(BUILDER)/.stamp
 	curl -sfL --create-dirs "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/include/dt-bindings/clock/ath79-clk.h?h=v$(LINUX_VERSION)" -o linux-include.tmp/dt-bindings/clock/ath79-clk.h
 	curl -sfL --create-dirs "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/include/dt-bindings/gpio/gpio.h?h=v$(LINUX_VERSION)" -o linux-include.tmp/dt-bindings/gpio/gpio.h
 	curl -sfL --create-dirs "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/include/dt-bindings/input/input.h?h=v$(LINUX_VERSION)" -o linux-include.tmp/dt-bindings/input/input.h
+	curl -sfL --create-dirs "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/include/dt-bindings/leds/common.h?h=v$(LINUX_VERSION)" -o linux-include.tmp/dt-bindings/leds/common.h
 	curl -sfL --create-dirs "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/include/uapi/linux/input-event-codes.h?h=v$(LINUX_VERSION)" -o linux-include.tmp/dt-bindings/input/linux-event-codes.h
 	curl -sfL --create-dirs "https://github.com/openwrt/openwrt/raw/v$(VERSION)/target/linux/generic/files/include/dt-bindings/mtd/partitions/uimage.h" -o linux-include.tmp/dt-bindings/mtd/partitions/uimage.h
 	rm -rf linux-include
@@ -120,8 +119,8 @@ $(KDIR)/.stamp: $(BUILDER)/.patch-stamp $(SDK)/.patch-stamp linux-include
 
 	touch $(KDIR)/.stamp
 
-builder-sources: $(BUILDER).tar.xz
-sdk-sources: $(SDK).tar.xz
+builder-sources: $(BUILDER).tar.zst
+sdk-sources: $(SDK).tar.zst
 sources: builder-sources sdk-sources
 builder: $(BUILDER)/.stamp
 sdk: $(SDK)/.stamp
